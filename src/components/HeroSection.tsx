@@ -4,12 +4,12 @@ import React from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { useUser } from '@clerk/nextjs';
+import { useAuth } from '@/contexts/AuthContext';
 import jaredRiceImage from "../../images/jared-rice-xce530fBHrk-unsplash 1.svg";
 import katherineHanlonImage from "../../images/katherine-hanlon-mod2s3-qFOc-unsplash 1.svg";
 
 export const HeroSection: React.FC = () => {
-  const { isSignedIn, isLoaded } = useUser();
+  const { user, loading } = useAuth();
 
   const heroVariants = {
     initial: { opacity: 0, y: 50 },
@@ -169,16 +169,16 @@ export const HeroSection: React.FC = () => {
             whileTap="tap"
             className="mx-auto"
           >
-            {!isLoaded ? (
+            {loading ? (
               // Loading state
               <div className="px-6 py-4 bg-gray-300 animate-pulse rounded-full">
                 <span className="text-transparent text-lg font-semibold font-['Poppins']">
                   Loading...
                 </span>
               </div>
-            ) : !isSignedIn ? (
+            ) : !user ? (
               // Not signed in - show Join now button
-              <Link href="/sign-up">
+              <Link href="/signup">
                 {/* Desktop/Tablet Button */}
                 <div className="hidden md:block" style={{
                   padding: '16px',

@@ -1,38 +1,23 @@
-import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
-import UserProfile from '@/models/UserProfile';
+import User from '@/models/User';
 import Activity from '@/models/Activity';
+import { getCurrentUser } from '@/lib/jwt';
 
 export async function GET() {
   try {
-    const { userId } = await auth();
-    
-    if (!userId) {
+    // Check authentication
+    const currentUserData = await getCurrentUser();
+    if (!currentUserData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectToDatabase();
 
-    // Get user profile for basic stats
-    let userProfile = await UserProfile.findOne({ clerkUserId: userId });
-    
-    // Create default user profile if it doesn't exist
-    if (!userProfile) {
-      // Get user data from Clerk
-      const clerkUser = await currentUser();
-      
-      userProfile = new UserProfile({
-        clerkUserId: userId,
-        email: clerkUser?.emailAddresses?.[0]?.emailAddress || 'user@example.com',
-        firstName: clerkUser?.firstName || 'User',
-        lastName: clerkUser?.lastName || 'Name',
-        profileImage: clerkUser?.imageUrl,
-        totalPoints: 0,
-        longestStreak: 0,
-        level: 1,
-      });
-      await userProfile.save();
+    // Get user data
+    const user = await User.findById(currentUserData.userId);
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Get today's date
@@ -43,7 +28,7 @@ export async function GET() {
 
     // Get today's activities to calculate stats
     const todayActivities = await Activity.find({
-      userId,
+      userId: currentUserData.userId,
       createdAt: {
         $gte: today,
         $lt: tomorrow
@@ -82,7 +67,7 @@ export async function GET() {
       nextDay.setDate(nextDay.getDate() + 1);
       
       const dayActivities = await Activity.find({
-        userId,
+        userId: currentUserData.userId,
         createdAt: {
           $gte: checkDate,
           $lt: nextDay
@@ -96,12 +81,21 @@ export async function GET() {
       }
     }
 
+    // Update user's current streak and longest streak
+    if (currentStreak > user.currentStreak) {
+      user.currentStreak = currentStreak;
+      if (currentStreak > user.longestStreak) {
+        user.longestStreak = currentStreak;
+      }
+      await user.save();
+    }
+
     const stats = {
       user: {
-        totalPoints: userProfile.totalPoints || 0,
-        currentStreak: currentStreak,
-        longestStreak: Math.max(currentStreak, userProfile.longestStreak || 0),
-        level: Math.floor((userProfile.totalPoints || 0) / 100) + 1,
+        totalPoints: user.totalPoints || 0,
+        currentStreak: user.currentStreak || 0,
+        longestStreak: user.longestStreak || 0,
+        level: user.level || 1,
       },
       today: {
         goalsCompleted: goalsCompleted,

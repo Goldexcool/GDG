@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import { useAuth } from '@/contexts/AuthContext';
 import { redirect } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
@@ -75,9 +75,9 @@ interface WellnessStats {
 }
 
 export default function Dashboard() {
-  const { isLoaded, isSignedIn } = useUser();
+  const { user, loading } = useAuth();
   const [stats, setStats] = useState<WellnessStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   
   // Modal states
   const [workoutModalOpen, setWorkoutModalOpen] = useState(false);
@@ -85,15 +85,15 @@ export default function Dashboard() {
   const [mindfulnessModalOpen, setMindfulnessModalOpen] = useState(false);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      redirect('/sign-in');
+    if (!loading && !user) {
+      redirect('/login');
       return;
     }
     
-    if (isLoaded && isSignedIn) {
+    if (!loading && user) {
       fetchStats();
     }
-  }, [isLoaded, isSignedIn]);
+  }, [loading, user]);
 
   const fetchStats = async () => {
     try {
@@ -137,7 +137,7 @@ export default function Dashboard() {
         duration: 3000,
       });
     } finally {
-      setLoading(false);
+      setStatsLoading(false);
     }
   };
 
@@ -179,7 +179,7 @@ export default function Dashboard() {
     }
   };
 
-  if (!isLoaded || loading) {
+  if (loading || statsLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
@@ -190,7 +190,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!isSignedIn) {
+  if (!user) {
     return null; // This will be handled by the redirect in useEffect
   }
 

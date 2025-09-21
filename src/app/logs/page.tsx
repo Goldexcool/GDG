@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import { useAuth } from '@/contexts/AuthContext';
 import { redirect } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -22,20 +22,20 @@ interface ActivityStats {
 }
 
 export default function LogsOverview() {
-  const { isLoaded, isSignedIn } = useUser();
+  const { user, loading } = useAuth();
   const [stats, setStats] = useState<ActivityStats[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      redirect('/sign-in');
+    if (!loading && !user) {
+      redirect('/login');
       return;
     }
     
-    if (isLoaded && isSignedIn) {
+    if (!loading && user) {
       fetchActivityStats();
     }
-  }, [isLoaded, isSignedIn]);
+  }, [loading, user]);
 
   const fetchActivityStats = async () => {
     try {
@@ -47,11 +47,11 @@ export default function LogsOverview() {
     } catch (error) {
       console.error('Error fetching activity stats:', error);
     } finally {
-      setLoading(false);
+      setStatsLoading(false);
     }
   };
 
-  if (!isLoaded || loading) {
+  if (loading || statsLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#285E67]"></div>

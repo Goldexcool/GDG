@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
-import {
-  ClerkProvider,
-  SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from '@clerk/nextjs';
+import { AuthProvider } from "@/contexts/AuthContext";
+import AuthHeader from "@/components/auth/AuthHeader";
+import PageLoader from "@/components/PageLoader";
+import { Toaster } from 'react-hot-toast';
 import "./globals.css";
 
 const poppins = Poppins({
@@ -18,7 +14,7 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: "WellBalance - Digital Wellness Platform",
-  description: "Track your wellness journey with our comprehensive digital platform featuring Clerk authentication",
+  description: "Track your wellness journey with our comprehensive digital platform featuring custom authentication",
 };
 
 export default function RootLayout({
@@ -27,25 +23,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className={`${poppins.variable} font-poppins antialiased`}>
-          <header className="flex justify-end items-center p-4 gap-4 h-16">
-            <SignedOut>
-              <SignInButton />
-              <SignUpButton>
-                <button className="bg-[#6c47ff] text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
-                  Sign Up
-                </button>
-              </SignUpButton>
-            </SignedOut>
-            <SignedIn>
-              <UserButton />
-            </SignedIn>
-          </header>
+    <html lang="en">
+      <body className={`${poppins.variable} font-poppins antialiased`}>
+        <PageLoader />
+        <AuthProvider>
+          <AuthHeader />
           {children}
-        </body>
-      </html>
-    </ClerkProvider>
+          <Toaster 
+            position="top-center"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#363636',
+                color: '#fff',
+              },
+            }}
+          />
+        </AuthProvider>
+      </body>
+    </html>
   );
 }

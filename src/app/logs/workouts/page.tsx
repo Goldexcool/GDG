@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import { useAuth } from '@/contexts/AuthContext';
 import { redirect } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -32,9 +32,9 @@ interface WorkoutActivity {
 }
 
 export default function WorkoutLogs() {
-  const { isLoaded, isSignedIn } = useUser();
+  const { user, loading } = useAuth();
   const [activities, setActivities] = useState<WorkoutActivity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [sortBy, setSortBy] = useState('date');
@@ -43,15 +43,15 @@ export default function WorkoutLogs() {
   const [selectedActivity, setSelectedActivity] = useState<WorkoutActivity | null>(null);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      redirect('/sign-in');
+    if (!loading && !user) {
+      redirect('/login');
       return;
     }
     
-    if (isLoaded && isSignedIn) {
+    if (!loading && user) {
       fetchWorkouts();
     }
-  }, [isLoaded, isSignedIn]);
+  }, [loading, user]);
 
   const fetchWorkouts = async () => {
     try {
@@ -63,7 +63,7 @@ export default function WorkoutLogs() {
     } catch (error) {
       console.error('Error fetching workouts:', error);
     } finally {
-      setLoading(false);
+      setActivitiesLoading(false);
     }
   };
 
@@ -181,7 +181,7 @@ export default function WorkoutLogs() {
 
   const uniqueWorkoutTypes = Array.from(new Set(activities.map(a => a.workoutType)));
 
-  if (!isLoaded || loading) {
+  if (loading || activitiesLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#285E67]"></div>

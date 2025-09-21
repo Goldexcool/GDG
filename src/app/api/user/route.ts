@@ -1,40 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth, currentUser } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
-import UserProfile from '@/models/UserProfile';
+import User from '@/models/User';
+import { getCurrentUser } from '@/lib/jwt';
 
 export async function GET() {
   try {
-    const { userId } = await auth();
+    const currentUserData = await getCurrentUser();
     
-    if (!userId) {
+    if (!currentUserData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectToDatabase();
     
-    let userProfile = await UserProfile.findOne({ clerkUserId: userId });
+    const user = await User.findById(currentUserData.userId);
     
-    if (!userProfile) {
-      // Get user data from Clerk
-      const clerkUser = await currentUser();
-      
-      // Create default profile if it doesn't exist
-      userProfile = new UserProfile({
-        clerkUserId: userId,
-        email: clerkUser?.emailAddresses?.[0]?.emailAddress || 'user@example.com',
-        firstName: clerkUser?.firstName || 'User',
-        lastName: clerkUser?.lastName || 'Name',
-        profileImage: clerkUser?.imageUrl,
-        totalPoints: 0,
-        currentStreak: 0,
-        longestStreak: 0,
-        level: 1,
-      });
-      await userProfile.save();
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json(userProfile);
+    return NextResponse.json({
+      id: user._id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      fullName: user.getFullName(),
+      totalPoints: user.totalPoints,
+      level: user.level,
+      currentStreak: user.currentStreak,
+      longestStreak: user.longestStreak,
+      isEmailVerified: user.isEmailVerified,
+    });
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return NextResponse.json({ 
@@ -46,9 +42,9 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    const currentUserData = await getCurrentUser();
     
-    if (!userId) {
+    if (!currentUserData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -56,13 +52,28 @@ export async function PUT(request: NextRequest) {
     
     await connectToDatabase();
     
-    const userProfile = await UserProfile.findOneAndUpdate(
-      { clerkUserId: userId },
-      { ...body, clerkUserId: userId },
-      { new: true, upsert: true }
+    const user = await User.findByIdAndUpdate(
+      currentUserData.userId,
+      { ...body },
+      { new: true, runValidators: true }
     );
 
-    return NextResponse.json(userProfile);
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      id: user._id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      fullName: user.getFullName(),
+      totalPoints: user.totalPoints,
+      level: user.level,
+      currentStreak: user.currentStreak,
+      longestStreak: user.longestStreak,
+      isEmailVerified: user.isEmailVerified,
+    });
   } catch (error) {
     console.error('Error updating user profile:', error);
     return NextResponse.json({ 

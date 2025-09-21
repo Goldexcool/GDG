@@ -1,15 +1,15 @@
-import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Activity from '@/models/Activity';
-import UserProfile from '@/models/UserProfile';
+import User from '@/models/User';
 import DailyStats from '@/models/DailyStats';
+import { getCurrentUser } from '@/lib/jwt';
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    const currentUserData = await getCurrentUser();
     
-    if (!userId) {
+    if (!currentUserData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     await connectToDatabase();
 
-    const query: { userId: string; type?: string } = { userId };
+    const query: { userId: string; type?: string } = { userId: currentUserData.userId };
     if (type) {
       query.type = type;
     }
@@ -37,9 +37,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    const currentUserData = await getCurrentUser();
     
-    if (!userId) {
+    if (!currentUserData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -72,14 +72,14 @@ export async function POST(request: NextRequest) {
     // Create activity
     const activity = new Activity({
       ...body,
-      userId,
+      userId: currentUserData.userId,
       pointsEarned,
     });
     await activity.save();
 
     // Update user points
-    await UserProfile.findOneAndUpdate(
-      { clerkUserId: userId },
+    await User.findByIdAndUpdate(
+      currentUserData.userId,
       { $inc: { totalPoints: pointsEarned } }
     );
 
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     }
 
     await DailyStats.findOneAndUpdate(
-      { userId, date: today },
+      { userId: currentUserData.userId, date: today },
       updateData,
       { upsert: true }
     );
@@ -143,9 +143,9 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    const currentUserData = await getCurrentUser();
     
-    if (!userId) {
+    if (!currentUserData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -159,7 +159,7 @@ export async function PUT(request: NextRequest) {
     await connectToDatabase();
 
     // Find the existing activity to get the old points
-    const existingActivity = await Activity.findOne({ _id, userId });
+    const existingActivity = await Activity.findOne({ _id, userId: currentUserData.userId });
     if (!existingActivity) {
       return NextResponse.json({ error: 'Activity not found' }, { status: 404 });
     }
@@ -191,15 +191,15 @@ export async function PUT(request: NextRequest) {
 
     // Update the activity
     const updatedActivity = await Activity.findOneAndUpdate(
-      { _id, userId },
+      { _id, userId: currentUserData.userId },
       { ...updateData, pointsEarned: newPointsEarned },
       { new: true }
     );
 
     // Update user points if there's a difference
     if (pointsDifference !== 0) {
-      await UserProfile.findOneAndUpdate(
-        { clerkUserId: userId },
+      await User.findByIdAndUpdate(
+        currentUserData.userId,
         { $inc: { totalPoints: pointsDifference } }
       );
     }
@@ -210,7 +210,7 @@ export async function PUT(request: NextRequest) {
     
     if (pointsDifference !== 0) {
       await DailyStats.findOneAndUpdate(
-        { userId, date: activityDate },
+        { userId: currentUserData.userId, date: activityDate },
         { $inc: { pointsEarned: pointsDifference } }
       );
     }
@@ -224,9 +224,9 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    const currentUserData = await getCurrentUser();
     
-    if (!userId) {
+    if (!currentUserData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -240,17 +240,17 @@ export async function DELETE(request: NextRequest) {
     await connectToDatabase();
 
     // Find the activity to get its details before deletion
-    const activity = await Activity.findOne({ _id: activityId, userId });
+    const activity = await Activity.findOne({ _id: activityId, userId: currentUserData.userId });
     if (!activity) {
       return NextResponse.json({ error: 'Activity not found' }, { status: 404 });
     }
 
     // Delete the activity
-    await Activity.deleteOne({ _id: activityId, userId });
+    await Activity.deleteOne({ _id: activityId, userId: currentUserData.userId });
 
     // Update user points (subtract the points)
-    await UserProfile.findOneAndUpdate(
-      { clerkUserId: userId },
+    await User.findByIdAndUpdate(
+      currentUserData.userId,
       { $inc: { totalPoints: -activity.pointsEarned } }
     );
 
@@ -300,7 +300,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await DailyStats.findOneAndUpdate(
-      { userId, date: activityDate },
+      { userId: currentUserData.userId, date: activityDate },
       updateData
     );
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import { useAuth } from '@/contexts/AuthContext';
 import { redirect } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -35,9 +35,9 @@ interface MealActivity {
 }
 
 export default function MealLogs() {
-  const { isLoaded, isSignedIn } = useUser();
+  const { user, loading } = useAuth();
   const [activities, setActivities] = useState<MealActivity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [sortBy, setSortBy] = useState('date');
@@ -48,15 +48,15 @@ export default function MealLogs() {
   const [selectedActivity, setSelectedActivity] = useState<MealActivity | null>(null);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      redirect('/sign-in');
+    if (!loading && !user) {
+      redirect('/login');
       return;
     }
     
-    if (isLoaded && isSignedIn) {
+    if (!loading && user) {
       fetchMeals();
     }
-  }, [isLoaded, isSignedIn]);
+  }, [loading, user]);
 
   const fetchMeals = async () => {
     try {
@@ -68,7 +68,7 @@ export default function MealLogs() {
     } catch (error) {
       console.error('Error fetching meals:', error);
     } finally {
-      setLoading(false);
+      setActivitiesLoading(false);
     }
   };
 
@@ -194,7 +194,7 @@ export default function MealLogs() {
     return acc;
   }, { protein: 0, carbs: 0, fat: 0, fiber: 0 });
 
-  if (!isLoaded || loading) {
+  if (loading || activitiesLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-500"></div>

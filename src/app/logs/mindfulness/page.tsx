@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import { useAuth } from '@/contexts/AuthContext';
 import { redirect } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -31,9 +31,9 @@ interface MindfulnessActivity {
 }
 
 export default function MindfulnessLogs() {
-  const { isLoaded, isSignedIn } = useUser();
+  const { user, loading } = useAuth();
   const [activities, setActivities] = useState<MindfulnessActivity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [sortBy, setSortBy] = useState('date');
@@ -44,15 +44,15 @@ export default function MindfulnessLogs() {
   const [selectedActivity, setSelectedActivity] = useState<MindfulnessActivity | null>(null);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      redirect('/sign-in');
+    if (!loading && !user) {
+      redirect('/login');
       return;
     }
     
-    if (isLoaded && isSignedIn) {
+    if (!loading && user) {
       fetchMindfulness();
     }
-  }, [isLoaded, isSignedIn]);
+  }, [loading, user]);
 
   const fetchMindfulness = async () => {
     try {
@@ -64,7 +64,7 @@ export default function MindfulnessLogs() {
     } catch (error) {
       console.error('Error fetching mindfulness activities:', error);
     } finally {
-      setLoading(false);
+      setActivitiesLoading(false);
     }
   };
 
@@ -196,7 +196,7 @@ export default function MindfulnessLogs() {
     ? activities.filter(a => a.mood).reduce((sum, a) => sum + (a.mood || 0), 0) / activities.filter(a => a.mood).length
     : 0;
 
-  if (!isLoaded || loading) {
+  if (loading || activitiesLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-pink-500"></div>

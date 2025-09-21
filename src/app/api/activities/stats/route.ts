@@ -1,13 +1,13 @@
-import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Activity from '@/models/Activity';
+import { getCurrentUser } from '@/lib/jwt';
 
 export async function GET() {
   try {
-    const { userId } = await auth();
+    const currentUserData = await getCurrentUser();
     
-    if (!userId) {
+    if (!currentUserData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -18,7 +18,7 @@ export async function GET() {
     const stats = [];
 
     for (const type of activityTypes) {
-      const activities = await Activity.find({ userId, type }).sort({ date: -1 });
+      const activities = await Activity.find({ userId: currentUserData.userId, type }).sort({ date: -1 });
       
       const lastActivity = activities.length > 0 ? activities[0].date : null;
       const totalPoints = activities.reduce((sum, activity) => sum + (activity.pointsEarned || 0), 0);

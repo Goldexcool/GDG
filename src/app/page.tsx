@@ -1,22 +1,22 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { LandingPage } from "@/components/LandingPage";
 
 export default function Home() {
-  const { isSignedIn, isLoaded } = useUser();
+  const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    if (!loading && user) {
       router.push('/dashboard');
     }
-  }, [isLoaded, isSignedIn, router]);
+  }, [loading, user, router]);
 
   // Don't render anything while checking auth status
-  if (!isLoaded) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#285E67]"></div>
@@ -25,7 +25,7 @@ export default function Home() {
   }
 
   // Only show landing page if user is not signed in
-  if (!isSignedIn) {
+  if (!user) {
     return <LandingPage />;
   }
 
