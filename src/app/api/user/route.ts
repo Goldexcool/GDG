@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import UserProfile from '@/models/UserProfile';
 
@@ -16,12 +16,16 @@ export async function GET() {
     let userProfile = await UserProfile.findOne({ clerkUserId: userId });
     
     if (!userProfile) {
+      // Get user data from Clerk
+      const clerkUser = await currentUser();
+      
       // Create default profile if it doesn't exist
       userProfile = new UserProfile({
         clerkUserId: userId,
-        email: '', // Will be updated on first profile save
-        firstName: '',
-        lastName: '',
+        email: clerkUser?.emailAddresses?.[0]?.emailAddress || 'user@example.com',
+        firstName: clerkUser?.firstName || 'User',
+        lastName: clerkUser?.lastName || 'Name',
+        profileImage: clerkUser?.imageUrl,
         totalPoints: 0,
         currentStreak: 0,
         longestStreak: 0,
@@ -33,7 +37,10 @@ export async function GET() {
     return NextResponse.json(userProfile);
   } catch (error) {
     console.error('Error fetching user profile:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
@@ -58,6 +65,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(userProfile);
   } catch (error) {
     console.error('Error updating user profile:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }

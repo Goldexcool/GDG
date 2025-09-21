@@ -98,10 +98,44 @@ export default function Dashboard() {
   const fetchStats = async () => {
     try {
       const response = await fetch('/api/stats');
+      
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+      
       const data = await response.json();
+      
+      // Validate data structure
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid data received from API');
+      }
+      
       setStats(data);
     } catch (error) {
       console.error('Error fetching stats:', error);
+      
+      // Set default stats on error
+      setStats({
+        user: {
+          totalPoints: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          level: 1,
+        },
+        today: {
+          goalsCompleted: 0,
+          totalGoals: 3,
+          workoutsCompleted: 0,
+          mealsLogged: 0,
+          mindfulnessMinutes: 0,
+          waterGlasses: 0,
+          pointsEarned: 0,
+        }
+      });
+      
+      toast.error('Unable to load stats. Using default values.', {
+        duration: 3000,
+      });
     } finally {
       setLoading(false);
     }

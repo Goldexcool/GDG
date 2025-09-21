@@ -1,11 +1,10 @@
-import { auth } from '@clerk/nextjs/server';
-import { NextRequest, NextResponse } from 'next/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
-import DailyStats from '@/models/DailyStats';
 import UserProfile from '@/models/UserProfile';
-import WellnessGoal from '@/models/WellnessGoal';
+import Activity from '@/models/Activity';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const { userId } = await auth();
     
@@ -13,55 +12,84 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const days = parseInt(searchParams.get('days') || '7');
-
     await connectToDatabase();
 
     // Get user profile for basic stats
-    const userProfile = await UserProfile.findOne({ clerkUserId: userId });
+    let userProfile = await UserProfile.findOne({ clerkUserId: userId });
     
-    // Get recent daily stats
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - days);
-    
-    const dailyStats = await DailyStats.find({
-      userId,
-      date: { $gte: startDate, $lte: endDate }
-    }).sort({ date: 1 });
-
-    // Get active goals
-    const activeGoals = await WellnessGoal.find({
-      userId,
-      status: 'active'
-    });
-
-    // Calculate today's progress
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const todayStats = await DailyStats.findOne({ userId, date: today });
-    
-    // Calculate goals completed today
-    let goalsCompletedToday = 0;
-    const totalActiveGoals = activeGoals.length;
-    
-    for (const goal of activeGoals) {
-      if (goal.isDaily) {
-        const todayProgress = todayStats ? getTodayProgressForGoal(goal, todayStats) : 0;
-        if (todayProgress >= goal.targetValue) {
-          goalsCompletedToday++;
-        }
-      }
+    // Create default user profile if it doesn't exist
+    if (!userProfile) {
+      // Get user data from Clerk
+      const clerkUser = await currentUser();
+      
+      userProfile = new UserProfile({
+        clerkUserId: userId,
+        email: clerkUser?.emailAddresses?.[0]?.emailAddress || 'user@example.com',
+        firstName: clerkUser?.firstName || 'User',
+        lastName: clerkUser?.lastName || 'Name',
+        profileImage: clerkUser?.imageUrl,
+        totalPoints: 0,
+        longestStreak: 0,
+        level: 1,
+      });
+      await userProfile.save();
     }
 
-    // Calculate current streak
+    // Get today's date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Get today's activities to calculate stats
+    const todayActivities = await Activity.find({
+      userId,
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow
+      }
+    });
+
+    // Calculate today's stats
+    const workoutsToday = todayActivities.filter(a => a.type === 'workout').length;
+    const mealsToday = todayActivities.filter(a => a.type === 'meal').length;
+    const mindfulnessToday = todayActivities.filter(a => a.type === 'mindfulness');
+    const mindfulnessMinutes = mindfulnessToday.reduce((total, activity) => total + (activity.duration || 0), 0);
+    const pointsToday = todayActivities.reduce((total, activity) => total + (activity.pointsEarned || 0), 0);
+
+    // Simple goals calculation (basic daily targets)
+    const dailyGoals = {
+      workouts: 1,
+      meals: 3,
+      mindfulness: 10, // minutes
+    };
+
+    let goalsCompleted = 0;
+    const totalGoals = 3;
+
+    if (workoutsToday >= dailyGoals.workouts) goalsCompleted++;
+    if (mealsToday >= dailyGoals.meals) goalsCompleted++;
+    if (mindfulnessMinutes >= dailyGoals.mindfulness) goalsCompleted++;
+
+    // Calculate streak (simplified)
     let currentStreak = 0;
-    const sortedStats = dailyStats.sort((a, b) => b.date.getTime() - a.date.getTime());
+    const lastSevenDays = 7;
     
-    for (let i = 0; i < sortedStats.length; i++) {
-      if (sortedStats[i].goalsCompleted > 0) {
+    for (let i = 0; i < lastSevenDays; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const nextDay = new Date(checkDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      
+      const dayActivities = await Activity.find({
+        userId,
+        createdAt: {
+          $gte: checkDate,
+          $lt: nextDay
+        }
+      });
+      
+      if (dayActivities.length > 0) {
         currentStreak++;
       } else {
         break;
@@ -70,66 +98,28 @@ export async function GET(request: NextRequest) {
 
     const stats = {
       user: {
-        totalPoints: userProfile?.totalPoints || 0,
+        totalPoints: userProfile.totalPoints || 0,
         currentStreak: currentStreak,
-        longestStreak: userProfile?.longestStreak || 0,
-        level: userProfile?.level || 1,
+        longestStreak: Math.max(currentStreak, userProfile.longestStreak || 0),
+        level: Math.floor((userProfile.totalPoints || 0) / 100) + 1,
       },
       today: {
-        goalsCompleted: goalsCompletedToday,
-        totalGoals: totalActiveGoals,
-        workoutsCompleted: todayStats?.workoutsCompleted || 0,
-        mealsLogged: todayStats?.mealsLogged || 0,
-        mindfulnessMinutes: todayStats?.mindfulnessMinutes || 0,
-        waterGlasses: todayStats?.waterGlasses || 0,
-        pointsEarned: todayStats?.pointsEarned || 0,
-      },
-      trends: dailyStats.map(stat => ({
-        date: stat.date,
-        pointsEarned: stat.pointsEarned,
-        goalsCompleted: stat.goalsCompleted,
-        workoutsCompleted: stat.workoutsCompleted,
-        mealsLogged: stat.mealsLogged,
-        mindfulnessMinutes: stat.mindfulnessMinutes,
-      })),
-      goals: activeGoals.map(goal => ({
-        ...goal.toObject(),
-        todayProgress: todayStats ? getTodayProgressForGoal(goal, todayStats) : 0,
-      })),
+        goalsCompleted: goalsCompleted,
+        totalGoals: totalGoals,
+        workoutsCompleted: workoutsToday,
+        mealsLogged: mealsToday,
+        mindfulnessMinutes: mindfulnessMinutes,
+        waterGlasses: 0, // Can be added later
+        pointsEarned: pointsToday,
+      }
     };
 
     return NextResponse.json(stats);
   } catch (error) {
     console.error('Error fetching stats:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-interface WellnessGoalType {
-  category: 'fitness' | 'nutrition' | 'mindfulness' | 'sleep' | 'hydration' | 'weight';
-}
-
-interface DailyStatsType {
-  workoutsCompleted?: number;
-  mealsLogged?: number;
-  mindfulnessMinutes?: number;
-  waterGlasses?: number;
-  sleepHours?: number;
-}
-
-function getTodayProgressForGoal(goal: WellnessGoalType, todayStats: DailyStatsType): number {
-  switch (goal.category) {
-    case 'fitness':
-      return todayStats.workoutsCompleted || 0;
-    case 'nutrition':
-      return todayStats.mealsLogged || 0;
-    case 'mindfulness':
-      return todayStats.mindfulnessMinutes || 0;
-    case 'hydration':
-      return todayStats.waterGlasses || 0;
-    case 'sleep':
-      return todayStats.sleepHours || 0;
-    default:
-      return 0;
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
